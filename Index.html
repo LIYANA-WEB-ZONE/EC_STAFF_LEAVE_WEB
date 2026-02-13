@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Staff Leave Calendar</title>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #2c3e50; margin: 0; display: flex; justify-content: center; }
+        body.modal-open { overflow: hidden; }
+
+        .container { width: 100%; max-width: 450px; min-height: 100vh; background: white; padding: 20px; box-sizing: border-box; }
+        
+        h2 { 
+            text-align: center; 
+            color: #2c3e50; 
+            font-size: 28px; 
+            margin-top: 10px; 
+            margin-bottom: 25px; 
+            font-weight: 800;
+        }
+
+        .fc .fc-toolbar-title {
+            text-transform: uppercase !important;
+            font-weight: bold;
+            color: #34495e;
+        }
+        
+        /* අද දවස පෙන්වන කොටුව නිල් පාට කිරීම */
+        .fc .fc-day-today {
+            background-color: #d1ecf1 !important; 
+            border: 2px solid #007bff !important;
+        }
+
+        .legend { 
+            display: flex; 
+            justify-content: center; 
+            gap: 15px; 
+            margin-bottom: 20px; 
+            flex-wrap: wrap;
+        }
+        
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
+        .box { width: 14px; height: 14px; border-radius: 3px; }
+
+        #calendar { margin-top: 10px; }
+        
+        /* සියලුම events පෙන්වීමට උස සකස් කිරීම */
+        .fc-daygrid-day-frame { min-height: 80px !important; }
+        .fc-event { border: none !important; cursor: pointer; padding: 1px 2px !important; margin-bottom: 1px !important; }
+        .fc-event-title { font-size: 10px !important; font-weight: bold; text-align: center; color: white; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(2px); }
+        .modal-content { background: white; position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); padding: 25px; border-radius: 15px; width: 300px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        
+        .modal-header { font-size: 24px; font-weight: bold; border-bottom: 2px solid #eee; padding-bottom: 12px; margin-bottom: 15px; color: #2c3e50; }
+        .leave-item { padding: 12px 0; border-bottom: 1px solid #f4f4f4; text-align: left; font-size: 20px; color: #333; }
+        .leave-item b { font-size: 21px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>සේවක නිවාඩු දර්ශනය</h2>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="box" style="background: #e74c3c;"></div> පසුගිය නිවාඩු</div>
+        <div class="legend-item"><div class="box" style="background: #f1c40f;"></div> අද නිවාඩු</div>
+        <div class="legend-item"><div class="box" style="background: #27ae60;"></div> ඉදිරියට නිවාඩු</div>
+    </div>
+    
+    <div id="calendar"></div>
+</div>
+
+<div id="leaveModal" class="modal">
+    <div class="modal-content">
+        <div id="modalDate" class="modal-header"></div>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<script>
+    const scriptUrl = 'https://script.google.com/macros/s/AKfycbxHIshwoMhuF06eB3fzGlSHrQujoxJ_UWWezcM4ID5hOg56kyml0eAztKWXSEiDwnWHBQ/exec';
+
+    let allLeaves = [];
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const calendarEl = document.getElementById('calendar');
+
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            headerToolbar: { left: 'prev,next', center: 'title', right: '' },
+            dayMaxEvents: false, // "more" ලින්ක් එක ඉවත් කර සියල්ල පෙන්වීමට
+            contentHeight: 'auto', // උස සේවා අංක ගණන අනුව සකස් වේ
+            dateClick: function(info) { showDetails(info.dateStr); },
+            eventClick: function(info) { showDetails(info.event.startStr); },
+            events: function(info, successCallback, failureCallback) {
+                fetch(scriptUrl)
+                .then(res => res.json())
+                .then(data => {
+                    allLeaves = data.map(row => {
+                        let d = new Date(row.Date);
+                        d.setDate(d.getDate() + 1); 
+                        let fixedDate = d.toISOString().split('T')[0];
+                        return { ...row, Date: fixedDate };
+                    });
+
+                    const events = allLeaves.map(row => {
+                        let color;
+                        let textColor = 'white';
+
+                        if (row.Date === todayStr) {
+                            color = '#f1c40f';
+                            textColor = 'black'; 
+                        } else if (row.Date < todayStr) {
+                            color = '#e74c3c';
+                        } else {
+                            color = '#27ae60';
+                        }
+                        
+                        return { 
+                            title: String(row.ServiceNo), 
+                            start: row.Date,
+                            backgroundColor: color, 
+                            borderColor: color,
+                            textColor: textColor
+                        };
+                    });
+                    successCallback(events);
+                })
+                .catch(err => console.error("Error:", err));
+            }
+        });
+        calendar.render();
+    });
+
+    function showDetails(clickedDate) {
+        const dayLeaves = allLeaves.filter(l => l.Date === clickedDate);
+        const modal = document.getElementById('leaveModal');
+        const modalBody = document.getElementById('modalBody');
+        const modalDate = document.getElementById('modalDate');
+
+        modalDate.innerText = clickedDate;
+        
+        let statusColor;
+        if (clickedDate === todayStr) {
+            statusColor = '#f1c40f';
+        } else if (clickedDate < todayStr) {
+            statusColor = '#e74c3c';
+        } else {
+            statusColor = '#27ae60';
+        }
+
+        if (dayLeaves.length > 0) {
+            modalBody.innerHTML = dayLeaves.map(l => 
+                `<div class="leave-item"><b style="color: ${statusColor}">${l.ServiceNo}</b> - ${l.Name}</div>`
+            ).join('');
+        } else {
+            modalBody.innerHTML = "<div style='padding:15px; font-size: 20px;'>නිවාඩු නැත.</div>";
+        }
+
+        modal.style.display = "block";
+        document.body.classList.add('modal-open');
+    }
+
+    function closeModal() {
+        document.getElementById('leaveModal').style.display = "none";
+        document.body.classList.remove('modal-open');
+    }
+
+    window.onclick = function(e) { 
+        if (e.target.className === 'modal') {
+            closeModal();
+        }
+    }
+</script>
+
+</body>
+</html>
